@@ -1,0 +1,53 @@
+name: Sync latest Revenge bundle files
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "*/30 * * * *"
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Get latest successful run
+        id: run
+        run: |
+          RUN_ID=$(curl -s \
+            https://api.github.com/repos/revenge-mod/revenge-bundle-next/actions/runs \
+            | jq '.workflow_runs | map(select(.conclusion=="success")) | .[0].id')
+          echo "run_id=$RUN_ID" >> $GITHUB_OUTPUT
+
+      - name: Download artifacts
+        run: |
+          mkdir artifacts extracted site/latest
+
+          curl -s \
+            https://api.github.com/repos/revenge-mod/revenge-bundle-next/actions/runs/${{ steps.run.outputs.run_id }}/artifacts \
+            | jq -r '.artifacts[].archive_download_url' > urls.txt
+
+          while read url; do
+            curl -L \
+              -H "Authorization: Bearer $GITHUB_TOKEN" \
+              "$url" -o artifacts/artifact.zip
+            unzip -o artifacts/artifact.zip -d extracted
+          done < urls.txt
+
+      - name: Extract files from bundle zips
+        run: |
+          unzip -o extracted/**/revenge-bundle.zip -d prod
+          unzip -o extracted/**/revenge-bundle-development.zip -d dev
+          
+          cp prod/revenge.bundle site/latest/revenge.bundle
+          cp dev/revenge.bundle site/latest/revenge-development.bundle
+
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: site
