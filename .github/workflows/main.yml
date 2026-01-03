@@ -17,37 +17,71 @@ jobs:
 
       - name: Get latest successful run
         id: run
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           RUN_ID=$(curl -s \
+            -H "Authorization: Bearer $GH_TOKEN" \
             https://api.github.com/repos/revenge-mod/revenge-bundle-next/actions/runs \
             | jq '.workflow_runs | map(select(.conclusion=="success")) | .[0].id')
+          
+          if [ -z "$RUN_ID" ] || [ "$RUN_ID" = "null" ]; then
+            echo "Error: Could not find successful run"
+            exit 1
+          fi
+          
           echo "run_id=$RUN_ID" >> $GITHUB_OUTPUT
 
       - name: Download artifacts
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          mkdir artifacts extracted site/latest
+          mkdir -p artifacts extracted site/latest
 
           curl -s \
+            -H "Authorization: Bearer $GITHUB_TOKEN" \
             https://api.github.com/repos/revenge-mod/revenge-bundle-next/actions/runs/${{ steps.run.outputs.run_id }}/artifacts \
             | jq -r '.artifacts[].archive_download_url' > urls.txt
+
+          if [ ! -s urls.txt ]; then
+            echo "Error: No artifacts found"
+            exit 1
+          fi
 
           while read url; do
             curl -L \
               -H "Authorization: Bearer $GITHUB_TOKEN" \
               "$url" -o artifacts/artifact.zip
             unzip -o artifacts/artifact.zip -d extracted
+            rm artifacts/artifact.zip
           done < urls.txt
 
       - name: Extract files from bundle zips
         run: |
-          unzip -o extracted/**/revenge-bundle.zip -d prod
-          unzip -o extracted/**/revenge-bundle-development.zip -d dev
+          # Znajdź pliki revenge-bundle.zip
+          PROD_ZIP=$(find extracted -name "revenge-bundle.zip" -type f | head -1)
+          DEV_ZIP=$(find extracted -name "revenge-bundle-development.zip" -type f | head -1)
+          
+          if [ -z "$PROD_ZIP" ]; then
+            echo "Error: revenge-bundle.zip not found"
+            exit 1
+          fi
+          
+          if [ -z "$DEV_ZIP" ]; then
+            echo "Error: revenge-bundle-development.zip not found"
+            exit 1
+          fi
+          
+          mkdir -p prod dev
+          unzip -o "$PROD_ZIP" -d prod
+          unzip -o "$DEV_ZIP" -d dev
           
           cp prod/revenge.bundle site/latest/revenge.bundle
           cp dev/revenge.bundle site/latest/revenge-development.bundle
 
       - name: Deploy to GitHub Pages
-        uses: peaceiris/actions-gh-pages@v3
+        uses: peaceiris/actions-gh-pages@v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: site
+          keep_files: false
