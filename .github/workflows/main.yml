@@ -34,50 +34,53 @@ jobs:
 
       - name: Download artifacts
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ github.token }}
         run: |
-          mkdir -p artifacts extracted site/latest
-
+          mkdir -p artifacts site/latest
+          
           curl -s \
             -H "Authorization: Bearer $GITHUB_TOKEN" \
             https://api.github.com/repos/revenge-mod/revenge-bundle-next/actions/runs/${{ steps.run.outputs.run_id }}/artifacts \
-            | jq -r '.artifacts[].archive_download_url' > urls.txt
+            | jq -r '.artifacts[] | "\(.name)|\(.archive_download_url)"' > artifacts_list.txt
 
-          if [ ! -s urls.txt ]; then
+          if [ ! -s artifacts_list.txt ]; then
             echo "Error: No artifacts found"
             exit 1
           fi
 
-          while read url; do
+          while IFS='|' read -r name url; do
+            echo "Downloading artifact: $name"
             curl -L \
               -H "Authorization: Bearer $GITHUB_TOKEN" \
-              "$url" -o artifacts/artifact.zip
-            unzip -o artifacts/artifact.zip -d extracted
-            rm artifacts/artifact.zip
-          done < urls.txt
+              "$url" -o "artifacts/${name}.zip"
+            
+            unzip -o "artifacts/${name}.zip" -d "artifacts/${name}"
+          done < artifacts_list.txt
 
-      - name: Extract files from bundle zips
+      - name: Copy bundle files
         run: |
-          # Znajdź pliki revenge-bundle.zip
-          PROD_ZIP=$(find extracted -name "revenge-bundle.zip" -type f | head -1)
-          DEV_ZIP=$(find extracted -name "revenge-bundle-development.zip" -type f | head -1)
+          find artifacts -name "revenge.bundle" -type f
           
-          if [ -z "$PROD_ZIP" ]; then
-            echo "Error: revenge-bundle.zip not found"
+          PROD_BUNDLE=$(find artifacts -name "revenge.bundle" -type f | grep -v development | head -1)
+          DEV_BUNDLE=$(find artifacts -name "revenge.bundle" -type f | grep development | head -1)
+          
+          if [ -z "$PROD_BUNDLE" ]; then
+            echo "Error: Production bundle not found"
             exit 1
           fi
           
-          if [ -z "$DEV_ZIP" ]; then
-            echo "Error: revenge-bundle-development.zip not found"
+          if [ -z "$DEV_BUNDLE" ]; then
+            echo "Error: Development bundle not found"
             exit 1
           fi
           
-          mkdir -p prod dev
-          unzip -o "$PROD_ZIP" -d prod
-          unzip -o "$DEV_ZIP" -d dev
+          cp "$PROD_BUNDLE" site/latest/revenge.bundle
+          cp "$DEV_BUNDLE" site/latest/revenge-development.bundle
           
-          cp prod/revenge.bundle site/latest/revenge.bundle
-          cp dev/revenge.bundle site/latest/revenge-development.bundle
+          echo "Production bundle: $PROD_BUNDLE"
+          echo "Development bundle: $DEV_BUNDLE"
+          
+          ls -lh site/latest/
 
       - name: Deploy to GitHub Pages
         uses: peaceiris/actions-gh-pages@v4
