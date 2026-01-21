@@ -21,9 +21,9 @@ Tap on the Evaluate JavaScript option.
 Paste the link to bundle:
 
 ### Production Bundle
->https://dearminder.github.io/revenge-bundle-updater/latest/revenge.bundle
+>https://dearminder.github.io/revenge-bundle-next-updater/latest/revenge.bundle
 ### Development Bundle
->https://dearminder.github.io/revenge-bundle-updater/latest/revenge-development.bundle
+>https://dearminder.github.io/revenge-bundle-next-updater/latest/revenge-development.bundle
 ## ⚙️ How It Works
 
 1. **Scheduled Sync**: GitHub Actions runs daily at midnight UTC
