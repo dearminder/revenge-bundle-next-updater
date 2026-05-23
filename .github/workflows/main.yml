@@ -6,11 +6,16 @@ on:
     - cron: "0 0 * * *"
 
 permissions:
-  contents: write
+  contents: read
+  pages: write
+  id-token: write
 
 jobs:
   sync:
     runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
 
     steps:
       - uses: actions/checkout@v6
@@ -18,10 +23,10 @@ jobs:
       - name: Get latest successful run
         id: run
         env:
-          GH_TOKEN: ${{ github.token }}
+          GITHUB_TOKEN: ${{ github.token }}
         run: |
           RUN_ID=$(curl -s \
-            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Authorization: Bearer $GITHUB_TOKEN" \
             https://api.github.com/repos/revenge-mod/revenge-bundle-next/actions/runs \
             | jq '.workflow_runs | map(select(.conclusion=="success")) | .[0].id')
           
@@ -82,9 +87,11 @@ jobs:
           
           ls -lh site/latest/
 
-      - name: Deploy to GitHub Pages
-        uses: peaceiris/actions-gh-pages@v4
+      - name: Upload to GitHub Pages
+        uses: actions/upload-pages-artifact@v3
         with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: site
-          keep_files: false
+          path: site
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
